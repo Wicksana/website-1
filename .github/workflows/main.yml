@@ -1,0 +1,46 @@
+name: build
+
+on:
+  push:
+    branches: [ gh-pages ]
+  pull_request:
+    branches: [ gh-pages ]
+
+jobs:
+  test:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: '3.1'
+    - name: Install dependencies
+      run: |
+        gem install bundler
+        bundle install --jobs 4 --retry 3
+    - name: Workaround accessibility insights issue with atom.xml
+      run: "echo 'enabled: true' > _data/workaround_accessibility_insights_bug.yml"
+    - name: Build Jekyll
+      run: bundle exec jekyll build
+    - name: Markdownlint
+      run: bundle exec mdl -s markdownlint-config.rb .
+    - name: HTMLProofer
+      run: bundle exec htmlproofer ./_site --disable-external --allow-hash-href --no-enforce-https
+
+    # Accessibility scan
+    - uses: actions/setup-node@v3
+      with:
+          node-version: 16
+    - name: Scan for accessibility issues
+      uses: microsoft/accessibility-insights-action@v3
+      with:
+          static-site-dir: ${{ github.workspace }}/_site
+          scan-timeout: 600000
+    - name: Upload accessibility report
+      if: success() || failure()
+      uses: actions/upload-artifact@v3
+      with:
+          name: accessibility-reports
+          path: ${{ github.workspace }}/_accessibility-reports
